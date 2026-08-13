@@ -7,23 +7,29 @@
 using namespace std;
 
 /* ================= 选择场景类 ================= */
-class ChoiceScene
+    class ChoiceScene
+{
+public:
+    // 从剧本数组解析选项（i 指向【选择】的下一行）
+    void parse(const vector<string>& lines, int& i)
     {
-    public:
-        // 从当前文件流中解析选项
-        void parse(ifstream& fin)
-        {
-            options.clear();   // 防止重复添加
-            string opt;
+        options.clear();
+        targets.clear();
         const string prefix = "【选项】";
 
-        while (getline(fin, opt) && opt.find(prefix) == 0)
+        while (i < (int)lines.size() && lines[i].find(prefix) == 0)
         {
-            options.push_back(opt.substr(prefix.length()));
+            string opt = lines[i].substr(prefix.length());
+            auto p = opt.find("→");
+            if (p != string::npos)
+            {
+                options.push_back(opt.substr(0, p));
+                targets.push_back(opt.substr(p + 3));   // "→"是 UTF-8 3字节，跳过整个箭头
+            }
+            i++;
         }
     }
 
-    // 展示选项并获取玩家选择
     int show() const
     {
         cout << endl << "请选择：" << endl;
@@ -31,18 +37,24 @@ class ChoiceScene
         {
             cout << i + 1 << ". " << options[i] << endl;
         }
-
         int choice;
         cin >> choice;
+        cin.ignore();   // 清掉输入数字后残留的回车
         return choice;
     }
 
-    // 获取选项内容
     string getOption(int index) const
     {
         if (index >= 1 && index <= options.size())
             return options[index - 1];
         return "无效选项";
+    }
+
+    string getTarget(int index) const
+    {
+        if (index >= 1 && index <= targets.size())
+            return targets[index - 1];
+        return "";
     }
 
     bool empty() const
@@ -52,6 +64,7 @@ class ChoiceScene
 
 private:
     vector<string> options;
+    vector<string> targets;
 };
 
 /* ================= main ================= */
@@ -60,31 +73,48 @@ int main()
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
-    ifstream fin("script.txt");
+    ifstream fin("script.txt");   // 正式版：读仙侠剧本
     if (!fin)
     {
         cout << "无法打开 script.txt" << endl;
         return 1;
     }
-
+    vector<string> lines;
     string line;
-    ChoiceScene choice;
+    while (getline(fin, line)) lines.push_back(line);
+    fin.close();
 
-    while (getline(fin, line))
+    ChoiceScene choice;
+    int i = 0;
+    while (i < (int)lines.size())
     {
-        if (line == "【选择】")
+        string cur = lines[i];
+
+        if (cur == "【选择】")
         {
-            choice.parse(fin);   // 解析选项
-            int c = choice.show(); // 展示并选择
+            i++;
+            choice.parse(lines, i);
+            int c = choice.show();
             cout << "你选择了：" << choice.getOption(c) << endl;
             _getch();
+
+            string target = choice.getTarget(c);
+            int j=i;
+            while(j<(int)lines.size()&&lines[j].find(target) != 0) j++;
+            if (j < (int)lines.size()) i = j;
+            else break;
             continue;
         }
 
-        cout << line << endl;
-        _getch();
-    }
+        // 【结局】【汇合】都是路标行，不打印直接跳过
+        if (cur.find("【结局") == 0 || cur.find("【汇合") == 0) { i++; continue; }
 
-    fin.close();
+        // 【END】剧本结束标记
+        if (cur == "【END】") { break; }
+
+        cout << cur << endl;
+        _getch();
+        i++;
+    }
     return 0;
 }
